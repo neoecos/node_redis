@@ -115,6 +115,51 @@ next = function next(name) {
 
 // Tests are run in the order they are defined, so FLUSHDB should always be first.
 
+tests.IPV4 = function () {
+	var ipv4Client = redis.createClient( PORT, "127.0.0.1", { "family" : "IPv4" } );
+	
+	ipv4Client.once("ready", function start_tests() {
+		console.log("Connected to " + ipv4Client.host + ":" + ipv4Client.port + ", Redis server version " + ipv4Client.server_info.redis_version + "\n");
+		console.log("Using reply parser " + ipv4Client.reply_parser.name);
+
+		ipv4Client.quit();
+		run_next_test();
+	});
+
+	ipv4Client.on('end', function () {
+		
+	});
+
+	// Exit immediately on connection failure, which triggers "exit", below, which fails the test
+	ipv4Client.on("error", function (err) {
+		console.error("client: " + err.stack);
+		process.exit();
+	});	
+}
+
+tests.IPV6 = function () {
+	var ipv6Client = redis.createClient( PORT, "::1", { "family" : "IPv6" } );
+	
+	ipv6Client.once("ready", function start_tests() {
+		console.log("Connected to " + ipv6Client.host + ":" + ipv6Client.port + ", Redis server version " + ipv6Client.server_info.redis_version + "\n");
+		console.log("Using reply parser " + ipv6Client.reply_parser.name);
+
+		ipv6Client.quit();
+		run_next_test();
+	});
+
+	ipv6Client.on('end', function () {
+		
+	});
+
+	// Exit immediately on connection failure, which triggers "exit", below, which fails the test
+	ipv6Client.on("error", function (err) {
+		console.error("client: " + err.stack);
+		process.exit();
+	});
+}
+
+
 tests.FLUSHDB = function () {
     var name = "FLUSHDB";
     client.select(test_db_num, require_string("OK", name));
@@ -397,72 +442,6 @@ tests.FWD_ERRORS_1 = function () {
     client.publish(name, "Some message");
     setTimeout(function () {
         client3.listeners("error").push(originalHandlers);
-        assert.equal(recordedError, toThrow, "Should have caught our forced exception");
-        next(name);
-    }, 150);
-};
-
-tests.FWD_ERRORS_2 = function () {
-    var name = "FWD_ERRORS_2";
-
-    var toThrow = new Error("Forced exception");
-    var recordedError = null;
-
-    var originalHandler = client.listeners("error").pop();
-    client.removeAllListeners("error");
-    client.once("error", function (err) {
-        recordedError = err;
-    });
-
-    client.get("no_such_key", function (err, reply) {
-        throw toThrow;
-    });
-
-    setTimeout(function () {
-        client.listeners("error").push(originalHandler);
-        assert.equal(recordedError, toThrow, "Should have caught our forced exception");
-        next(name);
-    }, 150);
-};
-
-tests.FWD_ERRORS_3 = function () {
-    var name = "FWD_ERRORS_3";
-
-    var recordedError = null;
-
-    var originalHandler = client.listeners("error").pop();
-    client.removeAllListeners("error");
-    client.once("error", function (err) {
-        recordedError = err;
-    });
-
-    client.send_command("no_such_command", []);
-
-    setTimeout(function () {
-        client.listeners("error").push(originalHandler);
-        assert.ok(recordedError instanceof Error);
-        next(name);
-    }, 150);
-};
-
-tests.FWD_ERRORS_4 = function () {
-    var name = "FWD_ERRORS_4";
-
-    var toThrow = new Error("Forced exception");
-    var recordedError = null;
-
-    var originalHandler = client.listeners("error").pop();
-    client.removeAllListeners("error");
-    client.once("error", function (err) {
-        recordedError = err;
-    });
-
-    client.send_command("no_such_command", [], function () {
-        throw toThrow;
-    });
-
-    setTimeout(function () {
-        client.listeners("error").push(originalHandler);
         assert.equal(recordedError, toThrow, "Should have caught our forced exception");
         next(name);
     }, 150);
@@ -866,10 +845,13 @@ tests.reconnect_select_db_after_pubsub = function() {
 };
 
 tests.select_error_emits_if_no_callback = function () {
+    var prev = client.listeners("error")[0];
+    client.removeListener("error", prev);
     var name = "select_error_emits_if_no_callback";
     var handler = with_timeout(name, function (err) {
         require_error(name)(err);
         client.removeListener('error', handler);
+        client.on("error", prev);
         next(name);
     }, 500);
     client.on('error', handler);
@@ -954,7 +936,7 @@ tests.HMGET = function () {
     client.HMSET(key3, {
         "0123456789": "abcdefghij",
         "some manner of key": "a type of value"
-    }, require_string("OK", name));    
+    }, require_string("OK", name));
 
     client.HMGET(key1, "0123456789", "some manner of key", function (err, reply) {
         assert.strictEqual("abcdefghij", reply[0].toString(), name);
